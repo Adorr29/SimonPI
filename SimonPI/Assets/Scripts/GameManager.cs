@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -21,6 +20,7 @@ public class GameManager : MonoBehaviour
     public AudioClip successSound;
     public AudioClip errorSound;
     public AudioClip bigScoreSound;
+    public AudioClip[] typingSounds;
 
     AudioSource audioSource;
 
@@ -29,7 +29,7 @@ public class GameManager : MonoBehaviour
     int sequenceIndex = 0;
 
     Vector2 basePosition;
-    bool quickStart = false;
+    bool quickPlay = false;
 
     // Start is called before the first frame update
     void Start()
@@ -45,40 +45,6 @@ public class GameManager : MonoBehaviour
         StartCoroutine(Setup());
     }
 
-    IEnumerator Setup()
-    {
-        LockAllButtons(true);
-
-        yield return new WaitForSeconds(1);
-
-        yield return StartCoroutine(SmoothClearText(0.2f));
-
-        LockAllButtons(false);
-
-        yield return new WaitForSeconds(2);
-
-        if (quickStart == true) // if player have start before the LightUpSequence
-            yield break;
-
-        string mode = PlayerPrefs.GetString("Mode");
-        if (mode == "Classic")
-            SetupClassic();
-        else if (mode == "Free")
-            SetupFree();
-    }
-
-    void SetupClassic()
-    {
-        sequenceLength = 1;
-
-        StartCoroutine(LightUpSequence());
-    }
-
-    void SetupFree()
-    {
-        sequenceLength = int.MaxValue;
-    }
-
     // Update is called once per frame
     void Update()
     {
@@ -89,6 +55,40 @@ public class GameManager : MonoBehaviour
         Vector2 position = textParent.position;
         position.x = Vector2.Lerp(textParent.position, basePosition + Vector2.left * adjust * scaleFactor, 4 * Time.deltaTime).x; // maybe make a var for speed
         textParent.position = position;
+    }
+
+    IEnumerator Setup()
+    {
+        LockAllButtons(true);
+
+        yield return new WaitForSeconds(1);
+
+        yield return StartCoroutine(ClearText(0.2f));
+
+        LockAllButtons(false);
+
+        yield return new WaitForSeconds(1);
+
+        if (quickPlay == true) // if player have start before the LightUpSequence
+            yield break;
+
+        string mode = PlayerPrefs.GetString("Mode");
+        if (mode == "Classic")
+            SetupClassic();
+        else if (mode == "Recite")
+            SetupRecite();
+    }
+
+    void SetupClassic()
+    {
+        sequenceLength = 1;
+
+        StartCoroutine(LightUpSequence());
+    }
+
+    void SetupRecite()
+    {
+        sequenceLength = int.MaxValue;
     }
 
     List<SimpleButton> GetSequenceFromString(string sequenceStr)
@@ -110,33 +110,41 @@ public class GameManager : MonoBehaviour
 
     IEnumerator LightUpSequence()
     {
-        float lightsUpTime = 0.6f / (1 + Mathf.Pow((float)Math.E, sequenceLength / 5f - 5)) + 0.2f; // random math formul, but it woks ("f(x) = 0.6 / (1 + ℯ^(x / 5 - 5)) + 0.2" to see in geogebra)
+        float lightsUpTime = 0.5f;
 
-        quickStart = false;
+        if (quickPlay == false)
+            lightsUpTime  = 0.6f / (1 + Mathf.Pow((float)System.Math.E, sequenceLength / 5f - 5)) + 0.2f; // random math formul, but it woks ("f(x) = 0.6 / (1 + ℯ^(x / 5 - 5)) + 0.2" to see in geogebra)
 
         LockAllButtons(true);
 
-        if (text.text.Length > 0)
+        if (quickPlay == true)
         {
-            yield return new WaitForSeconds(1);
-
-            yield return StartCoroutine(SmoothClearText(0.2f));
-        }
-
-        for (int i = 0; i < sequenceLength; i++)
-        {
-            SimpleButton button = sequencePI[i];
-
-            yield return new WaitForSeconds(lightsUpTime * 1.5f);
+            SimpleButton button = sequencePI[sequenceLength - 1];
 
             button.LightsUp(lightsUpTime);
-
-            string buttonText = button.text.text;
-
-            text.text += buttonText;
         }
+        else
+        {
+            if (text.text.Length > 0)
+            {
+                yield return StartCoroutine(SmoothClearText(0.2f));
 
-        yield return new WaitForSeconds(lightsUpTime);
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            for (int i = 0; i < sequenceLength; i++)
+            {
+                SimpleButton button = sequencePI[i];
+
+                button.LightsUp(lightsUpTime);
+
+                string buttonText = button.text.text;
+
+                text.text += buttonText;
+
+                yield return new WaitForSeconds(lightsUpTime * 1.5f);
+            }
+        }
 
         yield return StartCoroutine(SmoothClearText(0.2f));
 
@@ -163,6 +171,23 @@ public class GameManager : MonoBehaviour
         text.color = defaultColor;
     }
 
+    public IEnumerator ClearText(float wait)
+    {
+        while (text.text.Length > 0)
+        {
+            char c = text.text[text.text.Length - 1];
+
+            text.text = text.text.Substring(0, text.text.Length - 1);
+
+            if (c == ' ')
+                continue;
+
+            PlayTypingSound();
+
+            yield return new WaitForSeconds(wait);
+        }
+    }
+
     public void LockAllButtons(bool isLock)
     {
         foreach (SimpleButton button in numberButton)
@@ -174,7 +199,7 @@ public class GameManager : MonoBehaviour
     public void OnButtonPress(SimpleButton pressedButton)
     {
         if (sequenceLength == 0)
-            quickStart = true;
+            quickPlay = true;
 
         string buttonText = pressedButton.text.text;
 
@@ -188,20 +213,29 @@ public class GameManager : MonoBehaviour
 
         sequenceIndex++;
 
-        if (quickStart == true)
+        if (sequenceLength == 0)
             return;
 
         if (sequenceIndex >= sequenceLength)
         {
+            LockAllButtons(true);
+
             text.color = successColor;
 
-            sequenceIndex = 0;
-            sequenceLength++;
-
-            StartCoroutine(LightUpSequence());
-
             audioSource.PlayOneShot(successSound);
+
+            StartCoroutine(NextStep());
         }
+    }
+
+    IEnumerator NextStep()
+    {
+        yield return new WaitForSeconds(1);
+
+        sequenceIndex = 0;
+        sequenceLength++;
+
+        yield return StartCoroutine(LightUpSequence());
     }
 
     void GameOver()
@@ -214,8 +248,8 @@ public class GameManager : MonoBehaviour
 
         string mode = PlayerPrefs.GetString("Mode");
         if (mode == "Classic")
-            Invoke(nameof(Retry), 3);
-        else if (mode == "Free")
+            StartCoroutine(Retry());
+        else if (mode == "Recite")
             StartCoroutine(Scoring());
 
         audioSource.PlayOneShot(errorSound);
@@ -237,14 +271,27 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    void Retry()
+    IEnumerator Retry()
     {
-        if (quickStart == true)
+        yield return new WaitForSeconds(3);
+
+        if (sequenceLength == 0)
             sequenceLength = sequenceIndex + 1;
 
         sequenceIndex = 0;
 
-        StartCoroutine(LightUpSequence());
+        if (quickPlay == true)
+        {
+            yield return StartCoroutine(SmoothClearText(0.2f));
+
+            LockAllButtons(false);
+        }
+        else
+        {
+            yield return new WaitForSeconds(1);
+
+            yield return StartCoroutine(LightUpSequence());
+        }
     }
 
     IEnumerator Scoring()
@@ -253,18 +300,23 @@ public class GameManager : MonoBehaviour
 
         text.color = defaultColor;
 
-        while (text.text.Length > 0)
-        {
-            text.text = text.text.Substring(0, text.text.Length - 1);
+        yield return StartCoroutine(ClearText(0.1f));
 
-            yield return new WaitForSeconds(0.1f);
-        }
-        
+        yield return new WaitForSeconds(1);
+
         foreach (char c in "Score = ")
         {
+            if (c == ' ')
+            {
+                text.text += c;
+                continue;
+            }
+
             yield return new WaitForSeconds(0.2f);
 
             text.text += c;
+
+            PlayTypingSound();
         }
 
         foreach (char c in sequenceIndex.ToString())
@@ -272,6 +324,8 @@ public class GameManager : MonoBehaviour
             yield return new WaitForSeconds(0.5f);
 
             text.text += c;
+
+            PlayTypingSound();
         }
 
         if (sequenceIndex >= 100)
@@ -280,5 +334,10 @@ public class GameManager : MonoBehaviour
 
             audioSource.PlayOneShot(bigScoreSound);
         }
+    }
+
+    void PlayTypingSound()
+    {
+        audioSource.PlayOneShot(typingSounds[Random.Range(0, typingSounds.Length)]);
     }
 }

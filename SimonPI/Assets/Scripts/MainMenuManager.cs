@@ -17,9 +17,9 @@ public class MainMenuManager : MonoBehaviour
         SceneManager.LoadScene("Game");
     }
 
-    public void PlayFree()
+    public void PlayRecite()
     {
-        PlayerPrefs.SetString("Mode", "Free");
+        PlayerPrefs.SetString("Mode", "Recite");
         SceneManager.LoadScene("Game");
     }
 

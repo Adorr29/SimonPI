@@ -106,7 +106,7 @@ public class SimpleButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandle
 
         if (isLock == true)
             return;
-        
+
         image.sprite = defaultSprite;
         text.gameObject.SetActive(true);
         pressedText.SetActive(false);
